@@ -1,27 +1,40 @@
-# DDC Brightness (`ddc-brightness@oserna`)
+# DDC brightness
 
-Cinnamon panel applet to adjust external monitor brightness via DDC/CI using mouse scroll on the panel icon.
+This Cinnamon panel applet is `ddc-brightness@oserna`. It sets external Display brightness over DDC/CI. Scroll the panel icon and `applet.js` runs `/usr/bin/ddcutil setvcp 10` on I2C bus 10.
 
-## Features
+## Inventory
 
-- Direct brightness adjustment with mouse scroll (10% steps).
-- Automatic startup brightness (80%).
-- Panel tooltip showing current percentage (`Brightness: X%`).
-- Asynchronous, non-blocking `ddcutil` execution with in-memory coalescing to handle rapid scroll bursts.
+| Path | Role |
+|---|---|
+| `applet.js` | Cinnamon `IconApplet`: scroll ±10%, startup 80%, latest `ddcutil setvcp` wins if a call is already running |
+| `metadata.json` | Xlet metadata: UUID, Cinnamon 6.0-6.6, symbolic icon |
+| `Makefile` | Symlink into `~/.local/share/cinnamon/applets/`, DBus reload/restart |
+| `manage-panel.py` | Enable/disable via `org.cinnamon enabled-applets` |
+| `CONTEXT.md` | Domain terms: Display, Brightness, BrightnessStep, StartupBrightness |
 
-## Requirements
+Brightness control is all in `applet.js`. Bus, VCP code, step, and startup level are constants: `I2C_BUS = "10"`, `VCP_CODE = "10"`, `BRIGHTNESS_STEP = 10`, `STARTUP_BRIGHTNESS = 80`. The applet assumes one Display. If a `ddcutil` subprocess is already running, later scrolls overwrite `_targetBrightness`. The next `ddcutil` runs when the current call finishes.
 
-- Cinnamon Desktop (>= 6.0)
-- `ddcutil` installed with user permissions in the `i2c` group
+`make install` only symlinks this repo to `~/.local/share/cinnamon/applets/ddc-brightness@oserna`. `manage-panel.py` appends `panel1:right:14:{uuid}:{instance}` to the GSettings applet list.
 
-## Development commands (`make`)
+## Layout
+
+```
+.
+├── applet.js          # Cinnamon entry, main()
+├── metadata.json      # UUID ddc-brightness@oserna
+├── Makefile           # install, enable, reload, uninstall
+├── manage-panel.py    # gsettings panel list
+└── CONTEXT.md         # vocabulary
+```
+
+## Setup
+
+Cinnamon 6.0+ and `ddcutil` at `/usr/bin/ddcutil`. You usually need to be in the `i2c` group. Hardware is I2C bus 10 only.
 
 ```bash
-make install    # Create symlink at ~/.local/share/cinnamon/applets/ddc-brightness@oserna
-make enable     # Install symlink and add applet to Cinnamon enabled-applets
-make disable    # Remove applet from enabled-applets
-make reload     # Hot-reload applet via DBus (without restarting session)
-make restart    # Restart Cinnamon via DBus
-make status     # Show symlink and GSettings status
-make uninstall  # Disable applet and remove symlink
+make enable    # symlink + add to panel1 right
+make status    # symlink and GSettings
+make reload    # hot-reload via DBus
 ```
+
+Other targets: `install` which only creates the symlink, `disable`, `restart`, `uninstall`.
