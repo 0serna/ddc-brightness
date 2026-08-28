@@ -17,7 +17,7 @@ The increment or decrement applied to Brightness per scroll gesture. Value for t
 _Avoid_: delta, tick
 
 **StartupBrightness**:
-The Brightness level the applet applies upon initialization. Value for this product: 80.
+The Brightness level the applet applies upon initialization. Value for this product: 100.
 _Avoid_: default brightness (ambiguous: UI-only vs hardware state)
 
 **Applet**:

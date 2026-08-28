@@ -4,7 +4,7 @@ const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 
 const BRIGHTNESS_STEP = 10;
-const STARTUP_BRIGHTNESS = 80;
+const STARTUP_BRIGHTNESS = 100;
 const VCP_CODE = "10";
 const I2C_BUS = "10";
 
