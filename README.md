@@ -10,7 +10,7 @@ This Cinnamon panel applet is `ddc-brightness@oserna`. It sets external Display 
 | `metadata.json` | Xlet metadata: UUID, Cinnamon 6.0-6.6, symbolic icon |
 | `Makefile` | Symlink into `~/.local/share/cinnamon/applets/`, DBus reload/restart |
 | `manage-panel.py` | Enable/disable via `org.cinnamon enabled-applets` |
-| `CONTEXT.md` | Domain terms: Display, Brightness, BrightnessStep, StartupBrightness |
+| `GLOSSARY.md` | Domain terms: Display, Brightness, BrightnessStep, StartupBrightness |
 
 Brightness control is all in `applet.js`. Bus, VCP code, step, and startup level are constants: `I2C_BUS = "10"`, `VCP_CODE = "10"`, `BRIGHTNESS_STEP = 10`, `STARTUP_BRIGHTNESS = 100`. The applet assumes one Display. If a `ddcutil` subprocess is already running, later scrolls overwrite `_targetBrightness`. The next `ddcutil` runs when the current call finishes.
 
@@ -24,7 +24,7 @@ Brightness control is all in `applet.js`. Bus, VCP code, step, and startup level
 ├── metadata.json      # UUID ddc-brightness@oserna
 ├── Makefile           # install, enable, reload, uninstall
 ├── manage-panel.py    # gsettings panel list
-└── CONTEXT.md         # vocabulary
+└── GLOSSARY.md         # vocabulary
 ```
 
 ## Setup
