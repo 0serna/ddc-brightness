@@ -1,8 +1,9 @@
 UUID = ddc-brightness@oserna
 APPLET_DIR = $(HOME)/.local/share/cinnamon/applets/$(UUID)
 SRC_DIR = $(CURDIR)
+MAIN_WORKTREE := $(patsubst %/.git,%,$(shell git rev-parse --path-format=absolute --git-common-dir))
 
-.PHONY: all install enable disable reload restart uninstall status
+.PHONY: all install update-main enable disable reload restart uninstall status
 
 all: install
 
@@ -13,6 +14,11 @@ install:
 	fi
 	@ln -s "$(SRC_DIR)" "$(APPLET_DIR)"
 	@echo "Symlink installed: $(APPLET_DIR) -> $(SRC_DIR)"
+
+update-main:
+	@test "$$(git -C "$(MAIN_WORKTREE)" branch --show-current)" = "main" || { echo "Main worktree is not on main: $(MAIN_WORKTREE)"; exit 1; }
+	git -C "$(MAIN_WORKTREE)" pull --ff-only
+	make -C "$(MAIN_WORKTREE)" install reload
 
 uninstall: disable
 	@if [ -L "$(APPLET_DIR)" ] || [ -e "$(APPLET_DIR)" ]; then \
