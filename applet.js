@@ -7,6 +7,21 @@ const BRIGHTNESS_STEP = 10;
 const STARTUP_BRIGHTNESS = 100;
 const VCP_CODE = "10";
 const I2C_BUS = "10";
+const SCHEDULE_CHECK_SECONDS = 30;
+const SCHEDULE = [
+    [17 * 60, 80],
+    [17 * 60 + 30, 60],
+    [18 * 60, 40],
+];
+
+function latestStepIndex(minutes) {
+    let index = -1;
+    for (let i = 0; i < SCHEDULE.length; i++) {
+        if (SCHEDULE[i][0] <= minutes)
+            index = i;
+    }
+    return index;
+}
 
 class DdcBrightnessApplet extends Applet.IconApplet {
     constructor(metadata, orientation, panel_height, instance_id) {
@@ -15,13 +30,53 @@ class DdcBrightnessApplet extends Applet.IconApplet {
         this.brightness = STARTUP_BRIGHTNESS;
         this._isBusy = false;
         this._targetBrightness = null;
+        this._lastStepKey = null;
+        this._timerId = 0;
 
         this.set_applet_icon_symbolic_name("display-brightness-symbolic");
         this._updateTooltip();
 
         this.actor.connect("scroll-event", (actor, event) => this._onScrollEvent(actor, event));
 
-        this._applyBrightness(STARTUP_BRIGHTNESS);
+        this._checkSchedule(false);
+        this._applyBrightness(this.brightness);
+
+        this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, SCHEDULE_CHECK_SECONDS, () => {
+            this._checkSchedule(true);
+            return true;
+        });
+    }
+
+    _checkSchedule(apply) {
+        let now = GLib.DateTime.new_now_local();
+        let minutes = now.get_hour() * 60 + now.get_minute();
+        let index = latestStepIndex(minutes);
+
+        if (index < 0) {
+            this._lastStepKey = null;
+            return;
+        }
+
+        let key = `${now.format("%Y-%m-%d")}:${index}`;
+        if (key === this._lastStepKey)
+            return;
+
+        this._lastStepKey = key;
+        let target = SCHEDULE[index][1];
+        if (this.brightness <= target)
+            return;
+
+        this.brightness = target;
+        this._updateTooltip();
+        if (apply)
+            this._applyBrightness(target);
+    }
+
+    on_applet_removed_from_panel() {
+        if (this._timerId > 0) {
+            GLib.source_remove(this._timerId);
+            this._timerId = 0;
+        }
     }
 
     _updateTooltip() {
