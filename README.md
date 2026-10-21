@@ -51,4 +51,4 @@ make status    # symlink and GSettings
 make reload    # hot-reload via DBus
 ```
 
-Other targets: `install` which only creates the symlink, `disable`, `restart`, `uninstall`.
+Other targets: `install` which only creates the symlink, `update-main` which pulls `main` in the main worktree and installs from there, `disable`, `restart`, `uninstall`.
