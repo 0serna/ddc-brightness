@@ -9,8 +9,13 @@ all: install
 
 install:
 	@mkdir -p $(HOME)/.local/share/cinnamon/applets
-	@if [ -L "$(APPLET_DIR)" ] || [ -e "$(APPLET_DIR)" ]; then \
-		rm -rf "$(APPLET_DIR)"; \
+	@if [ -L "$(APPLET_DIR)" ]; then \
+		rm "$(APPLET_DIR)"; \
+	elif [ -e "$(APPLET_DIR)" ]; then \
+		backup="$(HOME)/.local/state/ddc-brightness/installed-$$(date +%Y%m%d%H%M%S)-$$$$"; \
+		mkdir -p "$(HOME)/.local/state/ddc-brightness"; \
+		mv "$(APPLET_DIR)" "$$backup"; \
+		echo "Moved existing directory to $$backup"; \
 	fi
 	@ln -s "$(SRC_DIR)" "$(APPLET_DIR)"
 	@echo "Symlink installed: $(APPLET_DIR) -> $(SRC_DIR)"
@@ -21,9 +26,12 @@ update-main:
 	make -C "$(MAIN_WORKTREE)" install reload
 
 uninstall: disable
-	@if [ -L "$(APPLET_DIR)" ] || [ -e "$(APPLET_DIR)" ]; then \
-		rm -rf "$(APPLET_DIR)"; \
+	@if [ -L "$(APPLET_DIR)" ]; then \
+		rm "$(APPLET_DIR)"; \
 		echo "Removed $(APPLET_DIR)"; \
+	elif [ -e "$(APPLET_DIR)" ]; then \
+		echo "Refusing to remove non-symlink: $(APPLET_DIR)"; \
+		exit 1; \
 	fi
 
 enable: install
@@ -34,19 +42,19 @@ disable:
 
 reload:
 	@if command -v cinnamon-dbus-command >/dev/null 2>&1; then \
-		cinnamon-dbus-command ReloadXlet $(UUID) APPLET; \
+		cinnamon-dbus-command ReloadXlet $(UUID) APPLET && \
 		echo "Applet $(UUID) reloaded via cinnamon-dbus-command."; \
 	else \
-		gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet "$(UUID)" "APPLET"; \
+		gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet "$(UUID)" "APPLET" && \
 		echo "Applet $(UUID) reloaded via gdbus."; \
 	fi
 
 restart:
 	@if command -v cinnamon-dbus-command >/dev/null 2>&1; then \
-		cinnamon-dbus-command RestartCinnamon 1; \
+		cinnamon-dbus-command RestartCinnamon 1 && \
 		echo "Cinnamon restarted via cinnamon-dbus-command."; \
 	else \
-		gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.RestartCinnamon true; \
+		gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.RestartCinnamon true && \
 		echo "Cinnamon restarted via gdbus."; \
 	fi
 

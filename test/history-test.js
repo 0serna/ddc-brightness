@@ -1,3 +1,4 @@
+const Clutter = imports.gi.Clutter;
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
 
@@ -9,10 +10,8 @@ if (!base)
 const dir = GLib.build_filenamev([base, "ddc-brightness"]);
 const file = GLib.build_filenamev([dir, "history.csv"]);
 
-GLib.mkdir_with_parents(dir, 0o755);
-GLib.chmod(dir, 0o755);
-GLib.file_set_contents(file, "");
-GLib.chmod(file, 0o644);
+if (GLib.file_test(dir, GLib.FileTest.EXISTS))
+    throw new Error(`${dir} exists. Use a fresh XDG_STATE_HOME and run make check.`);
 
 imports.searchPath.unshift(GLib.build_filenamev([repo, "test", "stubs"]));
 imports.searchPath.unshift(repo);
@@ -43,4 +42,33 @@ assert(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{4},scroll,100,90$/.test(lines
 assert(mode(dir) === 0o700, `Directory mode is ${mode(dir).toString(8)}, expected 700`);
 assert(mode(file) === 0o600, `File mode is ${mode(file).toString(8)}, expected 600`);
 
-print("History self-check passed.");
+assert(Applet.latestStepIndex(16 * 60 + 59) === -1, "17:00 step fired early");
+assert(Applet.latestStepIndex(17 * 60) === 0, "17:00 step missing");
+assert(Applet.latestStepIndex(17 * 60 + 30) === 1, "17:30 step missing");
+assert(Applet.latestStepIndex(18 * 60) === 2, "18:00 step missing");
+assert(Applet.latestStepIndex(23 * 60 + 59) === 2, "Last step missing");
+
+const applet = Object.create(Applet.DdcBrightnessApplet.prototype);
+applet.brightness = 100;
+applet._scrollAccum = 0;
+applet._applyBrightness = () => {};
+applet._updateTooltip = () => {};
+
+function smoothEvent(delta) {
+    return {
+        get_scroll_direction: () => Clutter.ScrollDirection.SMOOTH,
+        get_scroll_delta: () => [0, delta],
+    };
+}
+
+assert(applet._onScrollEvent(null, smoothEvent(0.5)) === Clutter.EVENT_PROPAGATE,
+    "A partial smooth step must not change Brightness");
+assert(applet.brightness === 100, `Partial smooth step changed Brightness to ${applet.brightness}`);
+assert(applet._onScrollEvent(null, smoothEvent(0.5)) === Clutter.EVENT_STOP,
+    "A full smooth step must consume the event");
+assert(applet.brightness === 90, `Smooth scroll down gave ${applet.brightness}`);
+assert(applet._onScrollEvent(null, smoothEvent(-1)) === Clutter.EVENT_STOP,
+    "Smooth scroll up must consume the event");
+assert(applet.brightness === 100, `Smooth scroll up gave ${applet.brightness}`);
+
+print("Self-check passed.");
