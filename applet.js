@@ -13,6 +13,25 @@ const SCHEDULE = [
     [17 * 60 + 30, 60],
     [18 * 60, 40],
 ];
+const HISTORY_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), "ddc-brightness"]);
+const HISTORY_FILE = GLib.build_filenamev([HISTORY_DIR, "history.csv"]);
+
+function appendHistory(source, from, to) {
+    try {
+        GLib.mkdir_with_parents(HISTORY_DIR, 0o700);
+        GLib.chmod(HISTORY_DIR, 0o700);
+        let stream = Gio.File.new_for_path(HISTORY_FILE).append_to(Gio.FileCreateFlags.PRIVATE, null);
+        try {
+            GLib.chmod(HISTORY_FILE, 0o600);
+            let now = GLib.DateTime.new_now_local().format("%Y-%m-%dT%H:%M:%S%z");
+            stream.write_all(`${now},${source},${from},${to}\n`, null);
+        } finally {
+            stream.close(null);
+        }
+    } catch (e) {
+        global.logError(`[ddc-brightness@oserna] history write error: ${e.message}`);
+    }
+}
 
 function latestStepIndex(minutes) {
     let index = -1;
@@ -40,6 +59,7 @@ class DdcBrightnessApplet extends Applet.IconApplet {
 
         this._checkSchedule(false);
         this._applyBrightness(this.brightness);
+        appendHistory("startup", "", this.brightness);
 
         this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, SCHEDULE_CHECK_SECONDS, () => {
             this._checkSchedule(true);
@@ -66,10 +86,13 @@ class DdcBrightnessApplet extends Applet.IconApplet {
         if (this.brightness <= target)
             return;
 
+        let previous = this.brightness;
         this.brightness = target;
         this._updateTooltip();
-        if (apply)
+        if (apply) {
+            appendHistory("schedule", previous, target);
             this._applyBrightness(target);
+        }
     }
 
     on_applet_removed_from_panel() {
@@ -100,6 +123,7 @@ class DdcBrightnessApplet extends Applet.IconApplet {
         }
 
         if (newBrightness !== this.brightness) {
+            appendHistory("scroll", this.brightness, newBrightness);
             this.brightness = newBrightness;
             this._updateTooltip();
             this._applyBrightness(this.brightness);
