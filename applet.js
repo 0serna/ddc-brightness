@@ -5,7 +5,7 @@ const GLib = imports.gi.GLib;
 
 const BRIGHTNESS_STEP = 10;
 const STARTUP_BRIGHTNESS = 100;
-const VCP_CODE = "10";
+const VCP_BRIGHTNESS = "0x10";
 const I2C_BUS = "10";
 const SCHEDULE_CHECK_SECONDS = 30;
 const SCHEDULE = [
@@ -42,15 +42,18 @@ function latestStepIndex(minutes) {
     return index;
 }
 
-class DdcBrightnessApplet extends Applet.IconApplet {
+var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
     constructor(metadata, orientation, panel_height, instance_id) {
         super(orientation, panel_height, instance_id);
 
         this.brightness = STARTUP_BRIGHTNESS;
+        this._confirmedBrightness = STARTUP_BRIGHTNESS;
         this._isBusy = false;
         this._targetBrightness = null;
         this._lastStepKey = null;
         this._timerId = 0;
+        this._removed = false;
+        this._scrollAccum = 0;
 
         this.set_applet_icon_symbolic_name("display-brightness-symbolic");
         this._updateTooltip();
@@ -96,6 +99,8 @@ class DdcBrightnessApplet extends Applet.IconApplet {
     }
 
     on_applet_removed_from_panel() {
+        this._removed = true;
+
         if (this._timerId > 0) {
             GLib.source_remove(this._timerId);
             this._timerId = 0;
@@ -109,7 +114,11 @@ class DdcBrightnessApplet extends Applet.IconApplet {
     _onScrollEvent(actor, event) {
         let direction = event.get_scroll_direction();
         if (direction === Clutter.ScrollDirection.SMOOTH) {
-            return Clutter.EVENT_PROPAGATE;
+            this._scrollAccum += event.get_scroll_delta()[1];
+            if (Math.abs(this._scrollAccum) < 1)
+                return Clutter.EVENT_PROPAGATE;
+            direction = this._scrollAccum > 0 ? Clutter.ScrollDirection.DOWN : Clutter.ScrollDirection.UP;
+            this._scrollAccum = 0;
         }
 
         let newBrightness = this.brightness;
@@ -133,6 +142,9 @@ class DdcBrightnessApplet extends Applet.IconApplet {
     }
 
     _applyBrightness(value) {
+        if (this._removed)
+            return;
+
         if (this._isBusy) {
             this._targetBrightness = value;
             return;
@@ -143,7 +155,7 @@ class DdcBrightnessApplet extends Applet.IconApplet {
             "/usr/bin/ddcutil",
             "--bus", I2C_BUS,
             "--sleep-multiplier", ".2",
-            "setvcp", VCP_CODE, value.toString()
+            "setvcp", VCP_BRIGHTNESS, value.toString()
         ];
 
         try {
@@ -153,13 +165,30 @@ class DdcBrightnessApplet extends Applet.IconApplet {
             });
             proc.init(null);
             proc.wait_async(null, (source, res) => {
+                let ok = false;
                 try {
                     source.wait_finish(res);
+                    ok = source.get_successful();
+                    if (!ok)
+                        global.logError(`[ddc-brightness@oserna] setvcp ${value} failed (exit ${source.get_exit_status()})`);
                 } catch (e) {
                     global.logError(`[ddc-brightness@oserna] setvcp error: ${e.message}`);
                 }
 
+                if (this._removed)
+                    return;
+
                 this._isBusy = false;
+                if (ok) {
+                    this._confirmedBrightness = value;
+                } else {
+                    this._lastStepKey = null;
+                    if (this._targetBrightness === null) {
+                        this.brightness = this._confirmedBrightness;
+                        this._updateTooltip();
+                    }
+                }
+
                 if (this._targetBrightness !== null) {
                     let nextValue = this._targetBrightness;
                     this._targetBrightness = null;
@@ -168,10 +197,14 @@ class DdcBrightnessApplet extends Applet.IconApplet {
             });
         } catch (e) {
             this._isBusy = false;
+            this._targetBrightness = null;
+            this._lastStepKey = null;
+            this.brightness = this._confirmedBrightness;
+            this._updateTooltip();
             global.logError(`[ddc-brightness@oserna] Could not spawn ddcutil: ${e.message}`);
         }
     }
-}
+};
 
 function main(metadata, orientation, panel_height, instance_id) {
     return new DdcBrightnessApplet(metadata, orientation, panel_height, instance_id);
