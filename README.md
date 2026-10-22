@@ -6,11 +6,12 @@ This Cinnamon panel applet is `ddc-brightness@oserna`. It sets external Display 
 
 | Path | Role |
 |---|---|
-| `applet.js` | Cinnamon `IconApplet`: scroll ±10%, daily Schedule, startup 100 % or the current ScheduleStep, latest `ddcutil setvcp` wins if a call is already running |
+| `applet.js` | Cinnamon `IconApplet`: scroll ±10%, daily Schedule, CSV History, startup 100 % or the current ScheduleStep, latest `ddcutil setvcp` wins if a call is already running |
 | `metadata.json` | Xlet metadata: UUID, Cinnamon 6.0-6.6, symbolic icon |
 | `Makefile` | Symlink into `~/.local/share/cinnamon/applets/`, DBus reload/restart |
 | `manage-panel.py` | Enable/disable via `org.cinnamon enabled-applets` |
-| `GLOSSARY.md` | Domain terms: Display, Brightness, Schedule, ScheduleStep, BrightnessStep, StartupBrightness |
+| `test/history-test.js` | `cjs` self-check: CSV fields, empty `startup` value, directory and file modes |
+| `GLOSSARY.md` | Domain terms: Display, Brightness, Schedule, ScheduleStep, BrightnessStep, History, StartupBrightness |
 
 Brightness control is all in `applet.js`. Bus, VCP code, step, startup level, and check interval are constants: `I2C_BUS = "10"`, `VCP_CODE = "10"`, `BRIGHTNESS_STEP = 10`, `STARTUP_BRIGHTNESS = 100`, `SCHEDULE_CHECK_SECONDS = 30`. The applet assumes one Display. If a `ddcutil` subprocess is already running, later scrolls overwrite `_targetBrightness`. The next `ddcutil` runs when the current call finishes.
 
@@ -30,6 +31,26 @@ The applet does not read Brightness from the Display. A change from the monitor 
 
 `make install` only symlinks this repo to `~/.local/share/cinnamon/applets/ddc-brightness@oserna`. `manage-panel.py` appends `panel1:right:14:{uuid}:{instance}` to the GSettings applet list.
 
+## History
+
+The applet appends one CSV line per Brightness change it requests, plus one line on each applet start, to `$XDG_STATE_HOME/ddc-brightness/history.csv`, by default `~/.local/state/ddc-brightness/history.csv`. The applet creates the directory and the file with modes 700 and 600. Each write restores those modes. The file has no rotation.
+
+| Field | Value |
+|---|---|
+| 1 | Local time, `YYYY-MM-DDTHH:MM:SS±HHMM` |
+| 2 | Source: `startup`, `scroll`, or `schedule` |
+| 3 | Previous Brightness. Empty for `startup`. |
+| 4 | New Brightness |
+
+A `startup` line has an empty previous value and shows the final Brightness after any ScheduleStep catch-up. That catch-up does not get a separate `schedule` line. The applet writes this line on each load, including `make reload`. The History records the change the applet requests, not a confirmed Display state. A change from the monitor OSD does not appear. After startup, the previous value is the applet's memory, not a read from the Display.
+
+Example: manual scrolls with the time and the new level.
+
+```bash
+awk -F, '$2 == "scroll" {print substr($1, 12, 5), $4}' \
+  "${XDG_STATE_HOME:-$HOME/.local/state}/ddc-brightness/history.csv"
+```
+
 ## Layout
 
 ```
@@ -38,6 +59,7 @@ The applet does not read Brightness from the Display. A change from the monitor 
 ├── metadata.json      # UUID ddc-brightness@oserna
 ├── Makefile           # install, enable, reload, uninstall
 ├── manage-panel.py    # gsettings panel list
+├── test/              # History self-check with cjs
 └── GLOSSARY.md         # vocabulary
 ```
 
@@ -49,6 +71,7 @@ Cinnamon 6.0+ and `ddcutil` at `/usr/bin/ddcutil`. You usually need to be in the
 make enable    # symlink + add to panel1 right
 make status    # symlink and GSettings
 make reload    # hot-reload via DBus
+make check     # History self-check with cjs
 ```
 
 Other targets: `install` which only creates the symlink, `update-main` which pulls `main` in the main worktree and installs from there, `disable`, `restart`, `uninstall`.

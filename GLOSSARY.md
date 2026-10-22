@@ -24,6 +24,10 @@ _Avoid_: timer, event
 The increment or decrement applied to Brightness per scroll gesture. Value for this product: 10.
 _Avoid_: delta, tick
 
+**History**:
+The local, append-only record of each Brightness change the Applet requests, plus one record per applet start: local time, source, previous Brightness, and new Brightness. A record can come from an applet start, a BrightnessStep, or a ScheduleStep.
+_Avoid_: log, telemetry, metrics
+
 **StartupBrightness**:
 The Brightness level the Applet applies when no ScheduleStep has elapsed that day. Value for this product: 100.
 _Avoid_: default brightness (ambiguous: UI-only vs hardware state)

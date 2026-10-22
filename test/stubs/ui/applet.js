@@ -1,0 +1,1 @@
+var IconApplet = class IconApplet {};
