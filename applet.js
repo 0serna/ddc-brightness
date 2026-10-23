@@ -4,6 +4,7 @@ const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 
 const BRIGHTNESS_STEP = 10;
+const SCROLL_DEDUPE_MS = 10;
 const STARTUP_BRIGHTNESS = 100;
 const VCP_BRIGHTNESS = "0x10";
 const I2C_BUS = "10";
@@ -53,6 +54,8 @@ var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
         this._lastStepKey = null;
         this._timerId = 0;
         this._removed = false;
+        this._lastScrollStepTime = -Infinity;
+        this._lastScrollType = null;
         this._scrollAccum = 0;
 
         this.set_applet_icon_symbolic_name("display-brightness-symbolic");
@@ -113,25 +116,44 @@ var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
 
     _onScrollEvent(actor, event) {
         let direction = event.get_scroll_direction();
+        let time = event.get_time();
+        let type;
+
+        // A high-resolution wheel sends a smooth event and a discrete event for one notch.
         if (direction === Clutter.ScrollDirection.SMOOTH) {
-            this._scrollAccum += event.get_scroll_delta()[1];
+            let delta = event.get_scroll_delta()[1];
+            if (delta === 0)
+                return Clutter.EVENT_PROPAGATE;
+            if (this._lastScrollType === "wheel" &&
+                Math.abs(time - this._lastScrollStepTime) < SCROLL_DEDUPE_MS)
+                return Clutter.EVENT_STOP;
+            this._scrollAccum += delta;
             if (Math.abs(this._scrollAccum) < 1)
                 return Clutter.EVENT_PROPAGATE;
             direction = this._scrollAccum > 0 ? Clutter.ScrollDirection.DOWN : Clutter.ScrollDirection.UP;
             this._scrollAccum = 0;
+            type = "smooth";
+        } else if (direction === Clutter.ScrollDirection.UP || direction === Clutter.ScrollDirection.DOWN) {
+            this._scrollAccum = 0;
+            if (this._lastScrollType === "smooth" &&
+                Math.abs(time - this._lastScrollStepTime) < SCROLL_DEDUPE_MS)
+                return Clutter.EVENT_STOP;
+            type = "wheel";
+        } else {
+            return Clutter.EVENT_PROPAGATE;
         }
 
         let newBrightness = this.brightness;
 
         if (direction === Clutter.ScrollDirection.UP) {
             newBrightness = Math.min(100, this.brightness + BRIGHTNESS_STEP);
-        } else if (direction === Clutter.ScrollDirection.DOWN) {
-            newBrightness = Math.max(0, this.brightness - BRIGHTNESS_STEP);
         } else {
-            return Clutter.EVENT_PROPAGATE;
+            newBrightness = Math.max(0, this.brightness - BRIGHTNESS_STEP);
         }
 
         if (newBrightness !== this.brightness) {
+            this._lastScrollStepTime = time;
+            this._lastScrollType = type;
             appendHistory("scroll", this.brightness, newBrightness);
             this.brightness = newBrightness;
             this._updateTooltip();
