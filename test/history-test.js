@@ -51,24 +51,76 @@ assert(Applet.latestStepIndex(23 * 60 + 59) === 2, "Last step missing");
 const applet = Object.create(Applet.DdcBrightnessApplet.prototype);
 applet.brightness = 100;
 applet._scrollAccum = 0;
+applet._lastScrollStepTime = -Infinity;
+applet._lastScrollType = null;
 applet._applyBrightness = () => {};
 applet._updateTooltip = () => {};
 
-function smoothEvent(delta) {
+function smoothEvent(delta, time) {
     return {
         get_scroll_direction: () => Clutter.ScrollDirection.SMOOTH,
         get_scroll_delta: () => [0, delta],
+        get_time: () => time,
     };
 }
 
-assert(applet._onScrollEvent(null, smoothEvent(0.5)) === Clutter.EVENT_PROPAGATE,
+function wheelEvent(direction, time) {
+    return {
+        get_scroll_direction: () => direction,
+        get_time: () => time,
+    };
+}
+
+assert(applet._onScrollEvent(null, smoothEvent(0.5, 1000)) === Clutter.EVENT_PROPAGATE,
     "A partial smooth step must not change Brightness");
 assert(applet.brightness === 100, `Partial smooth step changed Brightness to ${applet.brightness}`);
-assert(applet._onScrollEvent(null, smoothEvent(0.5)) === Clutter.EVENT_STOP,
+assert(applet._onScrollEvent(null, smoothEvent(0.5, 1020)) === Clutter.EVENT_STOP,
     "A full smooth step must consume the event");
 assert(applet.brightness === 90, `Smooth scroll down gave ${applet.brightness}`);
-assert(applet._onScrollEvent(null, smoothEvent(-1)) === Clutter.EVENT_STOP,
-    "Smooth scroll up must consume the event");
-assert(applet.brightness === 100, `Smooth scroll up gave ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.DOWN, 1020)) === Clutter.EVENT_STOP,
+    "A duplicate event from the same notch must be consumed");
+assert(applet.brightness === 90, `One notch changed Brightness twice to ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.DOWN, 1100)) === Clutter.EVENT_STOP,
+    "A new wheel notch must consume the event");
+assert(applet.brightness === 80, `Second wheel notch gave ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, smoothEvent(1, 1109)) === Clutter.EVENT_STOP,
+    "A smooth event within the dedupe window must be consumed");
+assert(applet.brightness === 80, `Duplicate smooth event changed Brightness to ${applet.brightness}`);
+assert(applet._onScrollEvent(null, smoothEvent(1, 1110)) === Clutter.EVENT_STOP,
+    "A smooth event at the dedupe boundary must step");
+assert(applet.brightness === 70, `Boundary smooth event gave ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.DOWN, 1120)) === Clutter.EVENT_STOP,
+    "A wheel notch after the dedupe window must step");
+assert(applet.brightness === 60, `Wheel notch after the dedupe window gave ${applet.brightness}`);
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.DOWN, 1125)) === Clutter.EVENT_STOP,
+    "A second wheel notch within the dedupe window must still step");
+assert(applet.brightness === 50, `Fast wheel notch gave ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.LEFT, 1130)) === Clutter.EVENT_PROPAGATE,
+    "Horizontal scroll must propagate");
+assert(applet.brightness === 50, `Horizontal scroll changed Brightness to ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, smoothEvent(0, 1140)) === Clutter.EVENT_PROPAGATE,
+    "A smooth event without movement must propagate");
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.DOWN, 1140)) === Clutter.EVENT_STOP,
+    "A wheel notch after an empty smooth event must consume the event");
+assert(applet.brightness === 40, `Wheel notch after empty smooth event gave ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, smoothEvent(-0.5, 1160)) === Clutter.EVENT_PROPAGATE,
+    "A partial smooth scroll up must not change Brightness");
+assert(applet._onScrollEvent(null, smoothEvent(-0.5, 1180)) === Clutter.EVENT_STOP,
+    "A full smooth scroll up must consume the event");
+assert(applet.brightness === 50, `Smooth scroll up gave ${applet.brightness}`);
+
+assert(applet._onScrollEvent(null, wheelEvent(Clutter.ScrollDirection.DOWN, 1200)) === Clutter.EVENT_STOP,
+    "A wheel notch must consume the event");
+assert(applet.brightness === 40, `Wheel notch gave ${applet.brightness}`);
+assert(applet._onScrollEvent(null, smoothEvent(1, 1200)) === Clutter.EVENT_STOP,
+    "A smooth duplicate after a wheel notch must be consumed");
+assert(applet.brightness === 40, `Smooth duplicate after a wheel notch gave ${applet.brightness}`);
 
 print("Self-check passed.");

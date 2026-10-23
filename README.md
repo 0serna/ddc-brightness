@@ -13,7 +13,7 @@ This Cinnamon panel applet is `ddc-brightness@oserna`. It sets external Display 
 | `test/history-test.js` | `cjs` self-check: CSV fields, empty `startup` value, directory and file modes, Schedule step lookup, smooth scroll |
 | `GLOSSARY.md` | Domain terms: Display, Brightness, Schedule, ScheduleStep, BrightnessStep, History, StartupBrightness |
 
-Brightness control is all in `applet.js`. Bus, VCP code, step, startup level, and check interval are constants: `I2C_BUS = "10"`, `VCP_BRIGHTNESS = "0x10"`, `BRIGHTNESS_STEP = 10`, `STARTUP_BRIGHTNESS = 100`, `SCHEDULE_CHECK_SECONDS = 30`. The applet assumes one Display. If a `ddcutil` subprocess is already running, later scrolls overwrite `_targetBrightness`. The next `ddcutil` runs when the current call finishes.
+Brightness control is all in `applet.js`. Bus, VCP code, step, dedupe window, startup level, and check interval are constants: `I2C_BUS = "10"`, `VCP_BRIGHTNESS = "0x10"`, `BRIGHTNESS_STEP = 10`, `SCROLL_DEDUPE_MS = 10`, `STARTUP_BRIGHTNESS = 100`, `SCHEDULE_CHECK_SECONDS = 30`. Each wheel notch changes Brightness by one BrightnessStep. A touchpad accumulates smooth deltas until one BrightnessStep. A high-resolution wheel sends two events with the same timestamp for one notch; the duplicate event is ignored. The applet assumes one Display. If a `ddcutil` subprocess is already running, later scrolls overwrite `_targetBrightness`. The next `ddcutil` runs when the current call finishes.
 
 ## Schedule
 
