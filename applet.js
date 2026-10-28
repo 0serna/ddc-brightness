@@ -8,12 +8,6 @@ const SCROLL_DEDUPE_MS = 10;
 const STARTUP_BRIGHTNESS = 100;
 const VCP_BRIGHTNESS = "0x10";
 const I2C_BUS = "10";
-const SCHEDULE_CHECK_SECONDS = 30;
-const SCHEDULE = [
-    [17 * 60, 80],
-    [17 * 60 + 30, 60],
-    [18 * 60, 40],
-];
 const HISTORY_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), "ddc-brightness"]);
 const HISTORY_FILE = GLib.build_filenamev([HISTORY_DIR, "history.csv"]);
 
@@ -34,15 +28,6 @@ function appendHistory(source, from, to) {
     }
 }
 
-function latestStepIndex(minutes) {
-    let index = -1;
-    for (let i = 0; i < SCHEDULE.length; i++) {
-        if (SCHEDULE[i][0] <= minutes)
-            index = i;
-    }
-    return index;
-}
-
 var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
     constructor(metadata, orientation, panel_height, instance_id) {
         super(orientation, panel_height, instance_id);
@@ -51,8 +36,6 @@ var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
         this._confirmedBrightness = STARTUP_BRIGHTNESS;
         this._isBusy = false;
         this._targetBrightness = null;
-        this._lastStepKey = null;
-        this._timerId = 0;
         this._removed = false;
         this._lastScrollStepTime = -Infinity;
         this._lastScrollType = null;
@@ -63,51 +46,12 @@ var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
 
         this.actor.connect("scroll-event", (actor, event) => this._onScrollEvent(actor, event));
 
-        this._checkSchedule(false);
         this._applyBrightness(this.brightness);
         appendHistory("startup", "", this.brightness);
-
-        this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, SCHEDULE_CHECK_SECONDS, () => {
-            this._checkSchedule(true);
-            return true;
-        });
-    }
-
-    _checkSchedule(apply) {
-        let now = GLib.DateTime.new_now_local();
-        let minutes = now.get_hour() * 60 + now.get_minute();
-        let index = latestStepIndex(minutes);
-
-        if (index < 0) {
-            this._lastStepKey = null;
-            return;
-        }
-
-        let key = `${now.format("%Y-%m-%d")}:${index}`;
-        if (key === this._lastStepKey)
-            return;
-
-        this._lastStepKey = key;
-        let target = SCHEDULE[index][1];
-        if (this.brightness <= target)
-            return;
-
-        let previous = this.brightness;
-        this.brightness = target;
-        this._updateTooltip();
-        if (apply) {
-            appendHistory("schedule", previous, target);
-            this._applyBrightness(target);
-        }
     }
 
     on_applet_removed_from_panel() {
         this._removed = true;
-
-        if (this._timerId > 0) {
-            GLib.source_remove(this._timerId);
-            this._timerId = 0;
-        }
     }
 
     _updateTooltip() {
@@ -204,7 +148,6 @@ var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
                 if (ok) {
                     this._confirmedBrightness = value;
                 } else {
-                    this._lastStepKey = null;
                     if (this._targetBrightness === null) {
                         this.brightness = this._confirmedBrightness;
                         this._updateTooltip();
@@ -220,7 +163,6 @@ var DdcBrightnessApplet = class DdcBrightnessApplet extends Applet.IconApplet {
         } catch (e) {
             this._isBusy = false;
             this._targetBrightness = null;
-            this._lastStepKey = null;
             this.brightness = this._confirmedBrightness;
             this._updateTooltip();
             global.logError(`[ddc-brightness@oserna] Could not spawn ddcutil: ${e.message}`);
